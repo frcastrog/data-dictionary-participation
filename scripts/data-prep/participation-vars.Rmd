@@ -1,0 +1,59 @@
+---
+title: "Political Participation Dictionary"
+output: html_document
+date: "2024-01-31"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+pacman::p_load(
+  stringr,
+  htmlTable,
+  dplyr, 
+  tidyverse, haven,
+  gt, purrr, 
+  install = TRUE
+)
+```
+
+# LAPOP
+
+Extract variables of specific key terms in `var_labs`, then obtain the variable
+names available in `var_names` from `lapop_data`
+
+```{r}
+relevant_vars_lapop <- lapop_data_dicts %>%
+  filter(str_detect(var_labs, regex("partic", ignore_case = TRUE))) %>%
+  pull(var_names)
+
+lapop_data_participation <- map(lapop_data, ~ {
+  .x %>%
+    select(pais, year, all_of(relevant_vars_lapop))})
+```
+
+
+```{r}
+part_vars_per_country <- map(lapop_data_participation, ~ {
+  .x %>%
+    mutate(
+      pais = as_factor(pais),  # Convert to factor to use the labels as levels
+      pais_code = as.integer(pais),  # Keep the numeric codes as well
+      pais_name = as.character(zap_labels(pais))  # Convert labels to character
+    ) %>%
+    select(-pais) %>%  # Remove the original 'pais' column
+    select(pais_code, pais_name, everything()) %>%  # Reorder columns
+    gather(key = "variable", value = "response", -pais_code, -pais_name) %>%
+    group_by(pais_code, pais_name, variable) %>%
+    summarise(n = n(), .groups = 'drop') %>%
+    spread(key = "variable", value = "n")
+})
+```
+
+```{r}
+part_vars_per_country_tab <- gt(part_vars_per_country[[1]])
+part_vars_per_country_tab
+```
+
